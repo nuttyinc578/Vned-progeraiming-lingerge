@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Satisfying Simulation 8 — HyperCube DSL (fixed)</title>
+<style>
+  html,body{height:100%;margin:0;background:#060b14;color:#e6eef8;font-family:Inter,system-ui}
+  #ui{position:fixed;top:10px;left:10px;background:rgba(255,255,255,0.06);padding:10px 12px;border-radius:12px;backdrop-filter:blur(6px);z-index:30}
+  textarea{width:360px;height:220px;background:#0b1323;color:#e6eef8;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:6px;font-family:monospace;font-size:13px}
+  button{background:#7ef0c7;color:#041b14;border:0;padding:6px 10px;border-radius:6px;margin-top:4px;cursor:pointer}
+  canvas{position:fixed;left:0;top:0;width:100%;height:100%;display:block}
+  #log{width:360px;height:120px;margin-top:8px;background:rgba(0,0,0,0.12);padding:8px;border-radius:8px;overflow:auto;font-family:monospace;font-size:12px}
+  .small{font-size:12px;opacity:0.9;margin-top:6px}
+</style>
+</head>
+<body>
+<div id="ui">
+  <strong>HyperCube Simulation 8 (fixed)</strong><br>
+  <textarea id="code">world {
+  background: rgba(8,14,30,1);
+}
+entity Particle {
+  count: 20;
+  size: range(40,100);
+  color: hsla(range(200,280),80%,60%,0.95);
+  wobble: 1.0;
+  attract: true;
+}
+
+entity Glow {
+  count: 12;
+  size: range(30,70);
+  color: hsla(range(120,180),90%,65%,0.9);
+  wobble: 0.8;
+}
+
+tesseract hyperShape {
+  center: (canvas.width/2, canvas.height/2);
+  size: min(canvas.width,canvas.height)*0.25;
+  rotationSpeed: 1.0;
+  projection: 2.3;
+}
+
+on click {
+  spawn Particle at (mouse.x, mouse.y) count 5;
+}</textarea><br>
+  <div style="display:flex;gap:8px;align-items:center">
+    <button id="run">Run Simulation 8</button>
+    <button id="stop">Stop</button>
+    <button id="validate">Validate</button>
+    <div class="small">Logs / Diagnostics below</div>
+  </div>
+
+  <div id="log">Ready. Press <strong>Validate</strong> to run parser checks, or <strong>Run</strong> to start the sim.</div>
+</div>
+<canvas id="c"></canvas>
+<script>
+// Fixed runtime: sanitize all numeric values used in gradients and proections.
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+let DPR = window.devicePixelRatio || 1;
+function resize(){ DPR = window.devicePixelRatio || 1; c.width = innerWidth * DPR; c.height = innerHeight * DPR; c.style.width = innerWidth + 'px'; c.style.height = innerHeight + 'px'; ctx.setTransform(DPR,0,0,DPR,0,0); }
+addEventListener('resize', resize); resize();
+
+const mouse = {x: innerWidth/2, y: innerHeight/2, down:false};
+addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+addEventListener('mousedown', e => { mouse.down = true; });
+addEventListener('mouseup', e => { mouse.down = false; });
+
+const logEl = document.getElementById('log');
+function log(msg){ const time = new Date().toLocaleTimeString(); logEl.innerHTML = '['+time+'] ' + msg + '<br/>' + logEl.innerHTML; console.log(msg); }
+
+function safeNum(v, fallback = 0){ const n = Number(v); return Number.isFinite(n) ? n : fallback; }
+
+function evalExpr(expr){ // more defensive than before
+  if(expr === undefined || expr === null) return null;
+  expr = String(expr).trim();
+  // tuple
+  const tup = expr.match(/^\(?\s*(.+?)\s*,\s*(.+?)\s*\)?$/);
+  if(tup){ return [evalExpr(tup[1]), evalExpr(tup[2])]; }
+  // numbers
+  if(/^[-+]?[0-9]*\.?[0-9]+$/.test(expr)) return parseFloat(expr);
+  // range(a,b)
+  let m = expr.match(/^range\(\s*([0-9.\-+]+)\s*,\s*([0-9.\-+]+)\s*\)$/i);
+  if(m) return safeNum(parseFloat(m[1]) + Math.random()*(parseFloat(m[2]) - parseFloat(m[1])), 0);
+  // hsla / rgba / rgb - pass through
+  if(/^hsla\(/i.test(expr) || /^rgba\(/i.test(expr) || /^rgb\(/i.test(expr)) return expr;
+  // canvas.width / canvas.height optionally divided
+  m = expr.match(/^canvas\.width\s*\/\s*([0-9.]+)$/i);
+  if(m) return (innerWidth) / safeNum(parseFloat(m[1]), 1);
+  m = expr.match(/^canvas\.height\s*\/\s*([0-9.]+)$/i);
+  if(m) return (innerHeight) / safeNum(parseFloat(m[1]), 1);
+  // min(canvas.width,canvas.height) * scale
+  m = expr.match(/^min\(\s*canvas\.width\s*,\s*canvas\.height\s*\)\s*\*\s*([0-9.]+)$/i);
+  if(m) return Math.min(innerWidth, innerHeight) * safeNum(parseFloat(m[1]), 1);
+  // bools
+  if(expr === 'true') return true; if(expr === 'false') return false;
+  // fallback: try to parse basic numeric expression safely
+  try{ if(/^[0-9+\-*/().\s]+$/.test(expr)) return Function('return ('+expr+')')(); }catch(e){}
+  return expr;
+}
+
+function parseDSL(src){ const lines = src.split('\n'); const out = {world:{}, entities:[], tesseracts:[], handlers:[]}; let i = 0;
+  function consume(i, cb){ i++; for(; i < lines.length; i++){ let l = lines[i].trim(); if(l.startsWith('}')) break; if(l && !l.startsWith('//')) cb(l); } return i; }
+
+  while(i < lines.length){ let L = lines[i].trim(); if(!L || L.startsWith('//')){ i++; continue; }
+    if(L.startsWith('world')){ i = consume(i, l => { const m = l.match(/^([a-zA-Z0-9_]+)\s*:\s*(.+)$/); if(m) out.world[m[1]] = m[2].trim(); }); }
+    else if(L.startsWith('entity ')){ const name = L.split(/\s+/)[1]; let props = {}; i = consume(i, l => { const m = l.match(/^([a-zA-Z0-9_]+)\s*:\s*(.+)$/); if(m) props[m[1]] = m[2].trim(); }); out.entities.push({name, props}); }
+    else if(L.startsWith('tesseract ')){ const name = L.split(/\s+/)[1]; let p = {}; i = consume(i, l => { const m = l.match(/^([a-zA-Z0-9_]+)\s*:\s*(.+)$/); if(m) p[m[1]] = m[2].trim(); }); out.tesseracts.push({name, props: p}); }
+    else if(L.startsWith('on ')){ const ev = L.split(/\s+/)[1]; let body = ''; i = consume(i, l => { body += l + '\n'; }); out.handlers.push({event: ev, body: body.trim()}); }
+    else { i++; }
+  }
+  return out;
+}
+
+let prog = {}; let ents = []; let tess = []; let running = false; let last = performance.now();
+
+function setup(parsed){ ents = []; tess = []; prog = parsed || {}; // world background
+  prog.world = prog.world || {};
+  const bg = evalExpr(prog.world.background) || 'rgba(8,14,30,1)';
+
+  // entities
+  for(const e of prog.entities || []){
+    const props = e.props || {};
+    const rawCount = evalExpr(props.count || 1);
+    const count = Math.max(1, Math.floor(safeNum(rawCount, 1)));
+    for(let k=0;k<count;k++){
+      const rawSize = evalExpr(props.size || 50);
+      const size = Math.max(1, safeNum(rawSize, 50));
+      const color = evalExpr(props.color || 'hsla(200,80%,60%,0.9)');
+      const wobble = safeNum(parseFloat(props.wobble), 0.8);
+      const attract = (props.attract === 'true' || props.attract === true);
+      const o = {
+        type: e.name,
+        x: Math.random() * innerWidth,
+        y: Math.random() * innerHeight,
+        vx: (Math.random() - 0.5) * 0.6,
+        vy: (Math.random() - 0.5) * 0.6,
+        size, r: size, color, wobble, phase: Math.random() * Math.PI * 2, attract
+      };
+      ents.push(o);
+    }
+  }
+
+  // tesseracts
+  for(const t of prog.tesseracts || []){
+    const p = t.props || {};
+    const centerVal = evalExpr(p.center || `(canvas.width/2, canvas.height/2)`);
+    let center = [innerWidth/2, innerHeight/2];
+    if(Array.isArray(centerVal) && centerVal.length >= 2){ center = [ safeNum(centerVal[0], innerWidth/2), safeNum(centerVal[1], innerHeight/2) ]; }
+    const sizeVal = evalExpr(p.size || Math.min(innerWidth,innerHeight) * 0.18);
+    const size = Math.max(1, safeNum(sizeVal, Math.min(innerWidth,innerHeight) * 0.18));
+    const rotSpeed = safeNum(evalExpr(p.rotationSpeed || 1), 1);
+    const projection = safeNum(evalExpr(p.projection || 2.6), 2.6);
+    tess.push({name: t.name, center, size, rot: 0, speed: rotSpeed, projection});
+  }
+
+  // store runtime state
+  prog.world.background = bg;
+  log('Setup: ' + ents.length + ' entities, ' + tess.length + ' tesseracts.');
+}
+
+// robust drawCircle: sanitize inputs and fallback if gradient fails
+function drawCircle(x,y,r,c){
+  x = safeNum(x, innerWidth/2); y = safeNum(y, innerHeight/2); r = safeNum(r, 1);
+  // clamp r to a reasonable range
+  if(!Number.isFinite(r) || r <= 0 || !isFinite(r)) r = 1;
+  if(r > Math.max(innerWidth, innerHeight) * 4) r = Math.max(innerWidth, innerHeight) * 4;
+  const innerR = Math.max(1, r * 0.05);
+  try{
+    const grd = ctx.createRadialGradient(x - r*0.2, y - r*0.2, innerR, x, y, r);
+    grd.addColorStop(0, String(c));
+    grd.addColorStop(1, 'rgba(0,0,0,0.12)');
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  } catch(err){
+    // If gradient creation fails (non-finite values), fall back to a solid fill circle
+    ctx.beginPath();
+    ctx.fillStyle = (typeof c === 'string') ? c : 'rgba(200,220,255,0.9)';
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    log('Warning: gradient failed — used solid fill. r=' + r + ', x=' + x + ', y=' + y + '. Error: ' + err.message);
+  }
+}
+
+// safe tesseract renderer with division guards
+function renderTesseract(t){
+  const cx = safeNum(t.center[0], innerWidth/2);
+  const cy = safeNum(t.center[1], innerHeight/2);
+  const s = Math.max(1, safeNum(t.size, Math.min(innerWidth, innerHeight) * 0.18));
+  t.rot += 0.003 * (safeNum(t.speed,1));
+  const rot = t.rot;
+  const verts = [];
+  for(let i=0;i<16;i++){
+    const x = (i&1) ? 1 : -1;
+    const y = (i&2) ? 1 : -1;
+    const z = (i&4) ? 1 : -1;
+    const w = (i&8) ? 1 : -1;
+    const ca = Math.cos(rot), sa = Math.sin(rot);
+    let X = x*ca - z*sa;
+    let Y = y;
+    let Z = x*sa + z*ca;
+    let W = w;
+    const d = safeNum(t.projection, 2.6);
+    // guard denom
+    let denom = d - (W * 0.5);
+    if(Math.abs(denom) < 1e-6) denom = (denom >= 0) ? 1e-6 : -1e-6;
+    let wf = 1 / denom;
+    if(!Number.isFinite(wf) || Math.abs(wf) > 1e6) wf = Math.sign(wf) * 1e3;
+    verts.push({x: cx + X * s * wf, y: cy + Y * s * wf, z: Z});
+  }
+  ctx.save(); ctx.strokeStyle = 'rgba(170,220,255,0.7)'; ctx.lineWidth = 1.4; ctx.beginPath();
+  for(let i=0;i<16;i++){
+    for(let j=i+1;j<16;j++){
+      let diff = 0; for(let k=0;k<4;k++) if(((i>>k)&1) !== ((j>>k)&1)) diff++;
+      if(diff === 1){ ctx.moveTo(verts[i].x, verts[i].y); ctx.lineTo(verts[j].x, verts[j].y); }
+    }
+  }
+  ctx.stroke(); ctx.restore();
+}
+
+// main loop
+function step(now){ if(!running) return; const dt = Math.min(40, now - last); last = now;
+  // background
+  ctx.fillStyle = prog.world && prog.world.background ? prog.world.background : 'rgba(8,14,30,1)';
+  ctx.fillRect(0,0,innerWidth,innerHeight);
+
+  // update entities
+  for(const e of ents){
+    e.phase += dt * 0.004 * (safeNum(e.wobble, 0.8));
+    // update velocity and position
+    if(e.attract){ e.vx += (mouse.x - e.x) * 0.00002 * dt; e.vy += (mouse.y - e.y) * 0.00002 * dt; }
+    e.vx *= 0.995; e.vy *= 0.995;
+    // clamp velocities to avoid runaway
+    if(!Number.isFinite(e.vx) || Math.abs(e.vx) > 1e4) e.vx = (Math.random()-0.5)*0.6;
+    if(!Number.isFinite(e.vy) || Math.abs(e.vy) > 1e4) e.vy = (Math.random()-0.5)*0.6;
+    e.x += e.vx * dt * 0.05; e.y += e.vy * dt * 0.05;
+    // sanity for positions
+    if(!Number.isFinite(e.x) || Math.abs(e.x) > 1e7) e.x = Math.random() * innerWidth;
+    if(!Number.isFinite(e.y) || Math.abs(e.y) > 1e7) e.y = Math.random() * innerHeight;
+    // compute radius safely
+    const rawR = e.size * (0.85 + 0.15 * Math.sin(e.phase));
+    const r = safeNum(rawR, Math.max(1, e.size));
+    // draw
+    drawCircle(e.x, e.y, r, e.color);
+  }
+
+  // draw tesseracts
+  for(const t of tess) renderTesseract(t);
+
+  requestAnimationFrame(step);
+}
+
+// spawn handler parsing
+function handleSpawn(parsed){ for(const h of (parsed.handlers || [])){
+    if(h.event === 'click'){
+      const re = /spawn\s+(\w+)\s+at\s*\(([^,]+),([^\)]+)\)\s*count\s*(\d+)/i;
+      const m = re.exec(h.body);
+      if(m) return {type: m[1], count: parseInt(m[4], 10) || 1};
+    }
+  }
+  return null; }
+
+c.addEventListener('click', e => {
+  const spawnDef = handleSpawn(prog || {});
+  if(spawnDef){ for(let k=0;k<spawnDef.count;k++){
+      const entDef = (prog.entities || []).find(x => x.name === spawnDef.type);
+      const props = entDef ? entDef.props : {};
+      const size = Math.max(1, safeNum(evalExpr(props.size || 12), 12));
+      const color = evalExpr(props.color || 'hsla(200,80%,60%,0.95)');
+      ents.push({type: spawnDef.type, x: safeNum(e.clientX, innerWidth/2) + (Math.random()-0.5)*20, y: safeNum(e.clientY, innerHeight/2) + (Math.random()-0.5)*20, vx:(Math.random()-0.5)*0.8, vy:(Math.random()-0.5)*0.8, size, r:size, color, phase:Math.random()*Math.PI*2, wobble:safeNum(parseFloat(props.wobble),0.8), attract:props.attract==='true'});
+    }
+  }
+});
+
+// validation tests
+function validateProgram(parsed){ const results = []; if(!parsed) return ['No program parsed']; results.push('Parsed top-level keys: ' + Object.keys(parsed).join(', '));
+  const entsDef = parsed.entities || [];
+  if(entsDef.length === 0) results.push('WARN: no entities defined'); else results.push('OK: ' + entsDef.length + ' entity types');
+  for(const ed of entsDef){ const sizeExpr = ed.props && ed.props.size; const v = evalExpr(sizeExpr || ''); if(!Number.isFinite(v)) results.push('WARN: entity ' + ed.name + ' size expression did not evaluate to number: ' + String(sizeExpr)); }
+  if((parsed.tesseracts || []).length === 0) results.push('WARN: no tesseract defined'); else results.push('OK: tesseract(s) found: ' + (parsed.tesseracts || []).map(t=>t.name).join(', '));
+  const spawnDef = handleSpawn(parsed); results.push('Spawn handler: ' + (spawnDef ? ('spawns ' + spawnDef.count + ' ' + spawnDef.type) : 'none'));
+  // runtime sanity check (quick)
+  try{ setup(parsed); for(const e of ents){ if(!Number.isFinite(e.size) || !Number.isFinite(e.x) || !Number.isFinite(e.y)) results.push('ERROR: entity instantiated with non-finite values: ' + JSON.stringify({type:e.type,size:e.size,x:e.x,y:e.y})); }
+  }catch(err){ results.push('Exception during instantiation: ' + err.message); }
+  return results;
+}
+
+// buttons
+const runBtn = document.getElementById('run'); const stopBtn = document.getElementById('stop'); const validateBtn = document.getElementById('validate');
+runBtn.onclick = () => { try{ prog = parseDSL(document.getElementById('code').value); const v = validateProgram(prog); v.forEach(x=>log(x)); setup(prog); if(!running){ running = true; last = performance.now(); requestAnimationFrame(step); } }catch(err){ log('Run failed: ' + err.message); } };
+stopBtn.onclick = () => { running = false; log('Stopped'); };
+validateBtn.onclick = () => { try{ const parsed = parseDSL(document.getElementById('code').value); const out = validateProgram(parsed); out.forEach(x=>log(x)); }catch(err){ log('Validate failed: ' + err.message); } };
+
+// auto-validate on load
+try{ const initial = parseDSL(document.getElementById('code').value); const checks = validateProgram(initial); checks.forEach(x=>log(x)); }catch(e){ log('Initial parse error: ' + e.message); }
+
+</script>
+</body>
+</html>

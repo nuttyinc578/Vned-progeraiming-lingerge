@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PNB Connect — Demo Site</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#6ee7b7;--muted:#9aa5b1;--glass:rgba(255,255,255,0.03)}
+    html,body{height:100%;margin:0;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;color:#e6eef6;background:linear-gradient(180deg,#071021 0%, #07152a 100%);}
+    .container{max-width:1100px;margin:32px auto;padding:24px}
+    header{display:flex;align-items:center;gap:16px}
+    .logo{width:56px;height:56px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#2dd4bf);display:flex;align-items:center;justify-content:center;font-weight:700;color:#042a20}
+    h1{margin:0;font-size:20px}
+    p.lead{margin:4px 0 18px;color:var(--muted)}
+
+    .grid{display:grid;grid-template-columns:1fr 420px;gap:20px}
+    .card{background:var(--card);border-radius:12px;padding:18px;box-shadow:0 6px 20px rgba(2,6,23,0.6);}
+    .section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    label{font-size:13px;color:var(--muted)}
+    input[type=text], select{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:var(--glass);color:inherit}
+    button{background:linear-gradient(90deg,var(--accent),#34d399);border:none;padding:10px 12px;border-radius:10px;color:#042a20;font-weight:600;cursor:pointer}
+    button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+    .hosts-list{list-style:none;padding:0;margin:8px 0 0;max-height:220px;overflow:auto}
+    .hosts-list li{padding:8px;border-radius:8px;margin-bottom:6px;background:linear-gradient(180deg,rgba(255,255,255,0.01),transparent);display:flex;justify-content:space-between;align-items:center}
+    .progress{height:10px;background:rgba(255,255,255,0.03);border-radius:999px;overflow:hidden}
+    .progress > i{display:block;height:100%;background:linear-gradient(90deg,#34d399,#6ee7b7);width:0%}
+    .vm-console{width:100%;height:300px;background:#020617;border-radius:8px;color:#8af5c9;display:flex;align-items:center;justify-content:center;font-family:monospace}
+    footer{margin-top:18px;color:var(--muted);font-size:13px}
+    @media (max-width:960px){.grid{grid-template-columns:1fr} .vm-console{height:220px}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">PNB</div>
+      <div>
+        <h1>PNB Connect — Static Demo</h1>
+        <p class="lead">Single-file HTML demo that simulates the PNB Connect app (network scan, VM actions, and SSH console). This is front-end only — to make it real, connect these actions to a server API.</p>
+      </div>
+    </header>
+
+    <main class="grid" role="main">
+      <div>
+        <section class="card" aria-labelledby="scan-title">
+          <div class="section-title"><h2 id="scan-title">Network Scan</h2><small class="muted">Simulated</small></div>
+          <label for="cidr">CIDR or host range</label>
+          <input id="cidr" type="text" value="192.168.1.0/28" />
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button id="scanBtn">Start Scan</button>
+            <button id="stopScanBtn" class="ghost">Stop</button>
+            <div style="flex:1"></div>
+            <small id="scanStatus" style="color:var(--muted)">Idle</small>
+          </div>
+
+          <div style="margin-top:12px">
+            <div class="progress" aria-hidden="true"><i id="scanProgress"></i></div>
+            <ul id="hosts" class="hosts-list" aria-live="polite"></ul>
+          </div>
+        </section>
+
+        <section class="card" style="margin-top:18px" aria-labelledby="ssh-title">
+          <div class="section-title"><h2 id="ssh-title">SSH Console</h2><small class="muted">Simulated local terminal</small></div>
+          <label for="sshHost">Host</label>
+          <input id="sshHost" type="text" placeholder="e.g. 192.168.1.12" />
+          <label for="sshCmd" style="margin-top:8px">Command</label>
+          <input id="sshCmd" type="text" value="uname -a" />
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button id="runSshBtn">Run</button>
+            <button id="clearConsole" class="ghost">Clear</button>
+            <div style="flex:1"></div>
+            <small id="sshStatus" style="color:var(--muted)">Ready</small>
+          </div>
+          <pre id="console" class="vm-console" tabindex="0">$ (console output will appear here)</pre>
+        </section>
+
+      </div>
+
+      <aside>
+        <section class="card" aria-labelledby="vm-title">
+          <div class="section-title"><h2 id="vm-title">Virtual Machine</h2><small class="muted">Client-side demo</small></div>
+
+          <label for="vmName">VM name</label>
+          <input id="vmName" type="text" value="pnb_demo_vm" />
+
+          <label for="iso" style="margin-top:8px">ISO (URL)</label>
+          <input id="iso" type="text" placeholder="https://example.com/installer.iso" />
+
+          <label for="ram" style="margin-top:8px">RAM (MB)</label>
+          <input id="ram" type="text" value="1024" />
+
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button id="createVmBtn">Create VM</button>
+            <button id="startVmBtn" class="ghost">Start (Open Console)</button>
+          </div>
+
+          <div style="margin-top:12px">
+            <small style="color:var(--muted)">Created VMs</small>
+            <ul id="vmList" class="hosts-list" style="max-height:160px"></ul>
+          </div>
+
+          <div style="margin-top:12px">
+            <small style="color:var(--muted)">Notes</small>
+            <p style="font-size:13px;color:var(--muted);margin:6px 0 0">This page is front-end-only. To perform real scans, SSH, or VM creation, connect the buttons to a secure server-side API that runs the privileged commands (e.g. calls to VBoxManage or SSH). Never run untrusted commands directly from a browser.</p>
+          </div>
+        </section>
+
+        <section class="card" style="margin-top:18px">
+          <h3>Quick Integration Tips</h3>
+          <ul style="color:var(--muted);font-size:14px;margin:8px 0 0;padding-left:18px">
+            <li>Expose a REST API on a trusted server to run VM and scan actions.</li>
+            <li>Authenticate (OAuth2 / API keys) and audit commands before execution.</li>
+            <li>Use websockets for live progress updates during scans or VM creation.</li>
+            <li>Run privileged operations in an isolated environment (containers / VMs).</li>
+          </ul>
+        </section>
+
+      </aside>
+    </main>
+
+    <footer>
+      <small>PNB Connect demo — single-file HTML. To get a version with a real server backend, tell me what stack you'd like (Node/Python/Go) and I'll generate the server code and API routes.</small>
+    </footer>
+  </div>
+
+  <script>
+    // Small client-only simulation logic
+    const scanBtn = document.getElementById('scanBtn');
+    const stopScanBtn = document.getElementById('stopScanBtn');
+    const scanProgress = document.getElementById('scanProgress');
+    const hostsEl = document.getElementById('hosts');
+    const scanStatus = document.getElementById('scanStatus');
+
+    let scanTimer = null;
+
+    function expandCidr(cidr){
+      // super-simplified: if ends with /28 or /24 generate some ips; otherwise split comma list
+      if(cidr.includes('/')){
+        const base = cidr.split('/')[0];
+        const parts = base.split('.');
+        const prefix = parts.slice(0,3).join('.');
+        const list = [];
+        for(let i=1;i<15;i++) list.push(prefix+"."+i);
+        return list;
+      }
+      return cidr.split(',').map(s=>s.trim()).filter(Boolean);
+    }
+
+    function randBool(p=0.35){return Math.random()<p}
+
+    scanBtn.addEventListener('click', ()=>{
+      hostsEl.innerHTML='';
+      const cidr = document.getElementById('cidr').value;
+      const ips = expandCidr(cidr);
+      scanStatus.textContent = 'Scanning...';
+      let i=0; scanProgress.style.width='0%';
+      scanTimer = setInterval(()=>{
+        if(i>=ips.length){ clearInterval(scanTimer); scanTimer=null; scanStatus.textContent=`Finished: ${hostsEl.children.length} hosts alive`; return; }
+        const ip = ips[i++];
+        const alive = randBool(0.4);
+        const li = document.createElement('li');
+        li.textContent = ip + (alive? ' ✓':'');
+        if(alive) li.style.borderLeft='3px solid var(--accent)';
+        hostsEl.appendChild(li);
+        scanProgress.style.width = Math.round((i/ips.length)*100)+'%';
+      }, 180);
+    });
+
+    stopScanBtn.addEventListener('click', ()=>{ if(scanTimer){ clearInterval(scanTimer); scanTimer=null; scanStatus.textContent='Stopped'; }});
+
+    // SSH console simulation
+    document.getElementById('runSshBtn').addEventListener('click', ()=>{
+      const host = document.getElementById('sshHost').value||'localhost';
+      const cmd = document.getElementById('sshCmd').value||'uname -a';
+      const consoleEl = document.getElementById('console');
+      document.getElementById('sshStatus').textContent='Running...';
+      setTimeout(()=>{
+        const out = `$ ${cmd}\nSimulated output from ${host}:\nLinux demo-host 5.15.0-0-generic #1 SMP Fri Sep 1 12:34:56 UTC 2023 x86_64 GNU/Linux`;
+        consoleEl.textContent = out;
+        document.getElementById('sshStatus').textContent='Done';
+      }, 900);
+    });
+    document.getElementById('clearConsole').addEventListener('click', ()=>{ document.getElementById('console').textContent='$ (console output will appear here)'; });
+
+    // VM create / start simulation
+    const vmList = document.getElementById('vmList');
+    const createVmBtn = document.getElementById('createVmBtn');
+    const startVmBtn = document.getElementById('startVmBtn');
+
+    function addVmToList(name){
+      const li = document.createElement('li');
+      li.textContent = name;
+      vmList.appendChild(li);
+    }
+
+    createVmBtn.addEventListener('click', ()=>{
+      const name = document.getElementById('vmName').value || 'pnb_vm_' + Math.floor(Math.random()*1000);
+      addVmToList(name);
+      alert('Simulated: VM "'+name+'" created (client-side only)');
+    });
+
+    startVmBtn.addEventListener('click', ()=>{
+      const selected = vmList.children.length? vmList.children[vmList.children.length-1].textContent : document.getElementById('vmName').value;
+      const win = window.open('about:blank','pnb_vm_console','width=800,height=500');
+      if(win){
+        win.document.write('<!doctype html><html><head><title>VM Console: '+selected+'</title><meta charset="utf-8"><style>body{margin:0;background:black;color:#8af5c9;font-family:monospace;display:flex;align-items:center;justify-content:center;height:100vh}</style></head><body><pre>Booting '+selected+'...\n\n[Simulated VM console]\n\nLogin: root\nroot@'+selected+':~# </pre></body></html>');
+        win.document.close();
+      } else alert('Popup blocked: allow popups to open a VM console window');
+    });
+
+  </script>
+</body>
+</html>

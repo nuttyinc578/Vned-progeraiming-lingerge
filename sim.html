@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Nutty'inc — 99 Satisfying Sims + HyperCubes 3D–10D</title>
+<style>
+  :root{--panel:rgba(255,255,255,0.04);--accent:#ffd166}
+  html,body{height:100%;margin:0;background:#050816;color:#eaf6ff;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+  .app{display:grid;grid-template-columns:380px 1fr;height:100vh;gap:12px;padding:12px}
+  .panel{background:var(--panel);padding:12px;border-radius:12px;overflow:auto}
+  .title{font-weight:800;margin-bottom:8px}
+  select,input[type=range]{width:100%}
+  .row{display:flex;gap:8px}
+  button{background:var(--accent);border:0;padding:8px;border-radius:8px;color:#1b1b1b;cursor:pointer}
+  canvas{display:block;width:100%;height:100%;border-radius:12px}
+  .small{font-size:13px;opacity:0.95}
+  footer{position:fixed;left:412px;bottom:14px;color:#bfe8ff;opacity:0.9;font-size:13px}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="panel" style="width:380px">
+    <div class="title">Nutty'inc — 99 Satisfying Sims + HyperCubes 3D→10D</div>
+    <label class="small">Mode</label>
+    <select id="modeSelect"></select>
+
+    <div style="margin-top:10px">
+      <label class="small">Particles / Detail: <span id="detailLabel">240</span></label>
+      <input id="detail" type="range" min="8" max="2000" value="240">
+    </div>
+
+    <div style="margin-top:8px">
+      <label class="small">Size / Scale: <span id="scaleLabel">1.0</span></label>
+      <input id="scale" type="range" min="0.2" max="3" step="0.01" value="1">
+    </div>
+
+    <div style="margin-top:8px" class="row">
+      <button id="regen">Regenerate</button>
+      <button id="pause">Pause</button>
+      <button id="resetView">Reset View</button>
+    </div>
+
+    <div class="small" style="margin-top:10px">Move mouse to interact, click to spawn or nudge, drag to rotate hypercubes. Made by <strong>Nutty'inc HyperCube</strong>.</div>
+  </div>
+
+  <div class="panel">
+    <canvas id="stage"></canvas>
+  </div>
+</div>
+<footer>Nutty'inc HyperCube — 99 Sims • HyperCube 3D..10D • Single-file</footer>
+
+<script>
+// Nutty'inc Suite — programmatically generate 99 sims and hypercubes from 3D to 10D.
+const canvas = document.getElementById('stage'); const ctx = canvas.getContext('2d');
+let DPR = Math.max(1, devicePixelRatio || 1);
+function resize(){ DPR = Math.max(1, devicePixelRatio || 1); canvas.width = (innerWidth - 420) * DPR; canvas.height = (innerHeight - 24) * DPR; canvas.style.width = (innerWidth - 420) + 'px'; canvas.style.height = (innerHeight - 24) + 'px'; ctx.setTransform(DPR,0,0,DPR,0,0); }
+addEventListener('resize', resize); resize();
+
+const modeSelect = document.getElementById('modeSelect'); const detailEl = document.getElementById('detail'); const detailLabel = document.getElementById('detailLabel'); const scaleEl = document.getElementById('scale'); const scaleLabel = document.getElementById('scaleLabel'); const regenBtn = document.getElementById('regen'); const pauseBtn = document.getElementById('pause'); const resetViewBtn = document.getElementById('resetView');
+let running = true; let paused = false; pauseBtn.onclick = ()=>{ paused = !paused; pauseBtn.textContent = paused ? 'Resume' : 'Pause'; };
+regenBtn.onclick = ()=> initScene(currentMode); modeSelect.onchange = ()=>{ currentMode = modeSelect.value; initScene(currentMode); };
+detailEl.oninput = ()=> detailLabel.textContent = detailEl.value; scaleEl.oninput = ()=> scaleLabel.textContent = Number(scaleEl.value).toFixed(2);
+
+// generate modes list
+const modes = [];
+for(let i=1;i<=99;i++) modes.push({id:'sim'+i, name:`Sim ${i}`});
+// add hypercubes 3D..10D
+for(let d=3; d<=10; d++) modes.push({id:`hyper${d}d`, name:`HyperCube ${d}D`});
+
+// populate select
+modes.forEach(m => { const opt = document.createElement('option'); opt.value = m.id; opt.textContent = m.name; modeSelect.appendChild(opt); });
+
+// input
+const mouse = {x: innerWidth/2, y: innerHeight/2, down:false, drag:false, lastX:0, lastY:0};
+addEventListener('mousemove', e=>{ mouse.x = e.clientX - 420; mouse.y = e.clientY - 12; if(mouse.drag){ mouse.lastX = e.clientX; mouse.lastY = e.clientY; } });
+addEventListener('mousedown', e=>{ mouse.down = true; mouse.drag = true; mouse.lastX = e.clientX; mouse.lastY = e.clientY; }); addEventListener('mouseup', e=>{ mouse.down = false; mouse.drag = false; });
+
+function safeNum(v, fallback=0){ const n = Number(v); return Number.isFinite(n) ? n : fallback; }
+
+// scene state
+let currentMode = 'sim1'; let entities = []; let meta = {};
+
+// generic draw helper
+function drawCircle(x,y,r,color){ x = safeNum(x, canvas.width/DPR/2); y = safeNum(y, canvas.height/DPR/2); r = Math.abs(safeNum(r,1)); if(r<=0) r=1; try{ const innerR = Math.max(1, r*0.05); const g = ctx.createRadialGradient(x - r*0.2, y - r*0.2, innerR, x, y, r); g.addColorStop(0, color); g.addColorStop(1, 'rgba(0,0,0,0.12)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); }catch(e){ ctx.fillStyle = (typeof color === 'string') ? color : 'rgba(200,220,255,0.9)'; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); }}
+
+// procedural scene generator: produce behavior parameters based on index
+function sceneSpecForIndex(i){ // return an object with type and seeds
+  const type = i % 12; // 12 base behaviors
+  const paletteShift = (i % 7) * 40;
+  const density = 60 + Math.floor((i/99) * 800);
+  const wobble = 0.3 + ((i % 5) * 0.18);
+  const scale = 0.6 + ((i % 4) * 0.5);
+  return {type, paletteShift, density, wobble, scale}; }
+
+// initialization: for sim1..sim99, create procedural variant
+function initScene(mode){ entities = []; meta = {}; const detail = Math.max(1, parseInt(detailEl.value)); const globalScale = safeNum(scaleEl.value,1); currentMode = mode || currentMode; if(currentMode.startsWith('sim')){ const idx = parseInt(currentMode.replace('sim',''),10) || 1; const spec = sceneSpecForIndex(idx); // use spec.type to pick base pattern
+  const n = Math.max(8, Math.floor(detail * (spec.scale * globalScale)));
+  meta.bg = '#061025'; // common bg
+  // create n entities with variation depending on spec.type
+  for(let k=0;k<n;k++){ const baseX = Math.random() * canvas.width/DPR; const baseY = Math.random() * canvas.height/DPR; const hue = (spec.paletteShift + Math.random()*120) % 360; const common = {x:baseX, y:baseY, vx:(Math.random()-0.5)*0.8, vy:(Math.random()-0.5)*0.8, hue};
+    switch(spec.type){
+      case 0: // bubble-like
+        entities.push(Object.assign({}, common, {r:4*spec.scale + Math.random()*18*spec.scale, alpha:0.9})); break;
+      case 1: // soft blobs
+        entities.push(Object.assign({}, common, {base:20*spec.scale + Math.random()*90*spec.scale, phase:Math.random()*6.28})); break;
+      case 2: // metaball-like
+        entities.push(Object.assign({}, common, {r:12*spec.scale + Math.random()*40*spec.scale})); break;
+      case 3: // rings/orbits
+        entities.push(Object.assign({}, common, {cx:canvas.width/DPR/2, cy:canvas.height/DPR/2, angle:Math.random()*Math.PI*2, rad:40+Math.random()*300, spd:0.0003+Math.random()*0.002, r:6*spec.scale})); break;
+      case 4: // ripple grid nodes
+        entities.push(Object.assign({}, common, {phase:Math.random()*6.28, base:4*spec.scale})); break;
+      case 5: // sand-like particles
+        entities.push(Object.assign({}, common, {vy:0.02+Math.random()*0.3, size:1+Math.random()*3, color:'rgba(220,200,160,0.95)'})); break;
+      case 6: // plasma
+        entities.push(Object.assign({}, common, {phase:Math.random()*6.28, h:Math.random()*360})); break;
+      case 7: // glow particles
+        entities.push(Object.assign({}, common, {r:6*spec.scale + Math.random()*22*spec.scale, vy: - (0.4 + Math.random()*1.2)})); break;
+      case 8: // magnetic orbs
+        entities.push(Object.assign({}, common, {r:6*spec.scale + Math.random()*18*spec.scale})); break;
+      case 9: // jelly
+        entities.push(Object.assign({}, common, {base:18*spec.scale + Math.random()*70*spec.scale, phase:Math.random()*6.28})); break;
+      case 10: // floating tiles
+        entities.push(Object.assign({}, common, {tx:baseX, ty:baseY, off:Math.random()*1.6})); break;
+      case 11: // wave curtain nodes
+        entities.push(Object.assign({}, common, {phase:Math.random()*6.28})); break;
+    }
+  }
+  // meta values
+  meta.spec = spec; meta.detail = detail; meta.globalScale = globalScale; meta.idx = idx;
+ } else if(currentMode.startsWith('hyper')){
+  // hypercube N-D
+  const d = parseInt(currentMode.replace('hyper','').replace('d',''),10);
+  initHypercubeND(d, parseInt(detailEl.value), safeNum(scaleEl.value,1));
+ }
+}
+
+// stepping functions: choose based on spec.type or mode
+function stepSimCommon(dt){ // called when currentMode is simX
+  const spec = meta.spec || sceneSpecForIndex(1);
+  ctx.fillStyle = 'rgba(6,12,22,0.08)'; ctx.fillRect(0,0,canvas.width/DPR, canvas.height/DPR);
+  const t = spec.type;
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  for(let i=0;i<entities.length;i++){
+    const e = entities[i];
+    switch(t){
+      case 0: // bubble
+        const dx = mouse.x - e.x, dy = mouse.y - e.y, d2 = dx*dx + dy*dy; if(mouse.down && d2>1){ const f = Math.min(200,2000/d2); e.vx += dx*(f*0.00002); e.vy += dy*(f*0.00002); } e.vy -= 0.00035*dt; e.vx*=0.995; e.vy*=0.995; e.x += e.vx*dt; e.y += e.vy*dt; drawCircle(e.x,e.y,e.r,`hsla(${e.hue},90%,75%,0.9)`); break;
+      case 1: // soft blobs
+        e.phase += dt*0.004; e.vx*=0.995; e.vy*=0.995; if(mouse.down){ e.vx += (mouse.x - e.x)*0.0004*dt; e.vy += (mouse.y - e.y)*0.0004*dt; } e.x += e.vx*dt; e.y += e.vy*dt; const r = Math.max(1, e.base*(0.85 + 0.22*Math.sin(e.phase))); drawCircle(e.x,e.y,r,`hsla(${e.hue},80%,65%,0.9)`); break;
+      case 2: // metaball-like
+        e.x += e.vx*dt*0.05; e.y += e.vy*dt*0.05; drawCircle(e.x,e.y,e.r,`hsla(${e.hue},85%,60%,0.9)`); break;
+      case 3: // rings
+        e.angle += e.spd*dt; const rx = e.cx + Math.cos(e.angle)*e.rad; const ry = e.cy + Math.sin(e.angle)*e.rad; drawCircle(rx,ry,e.r,`hsla(${e.hue},80%,65%,0.95)`); break;
+      case 4: // ripple nodes
+        e.phase += dt*0.004; const rr = e.base*(1 + 0.8*Math.sin(e.phase)); drawCircle(e.x,e.y,rr,'rgba(150,200,255,0.9)'); break;
+      case 5: // sand
+        e.vy += 0.0008*dt; e.y += e.vy*dt*0.05; if(e.y > canvas.height/DPR + 40) e.y = -20; ctx.fillStyle = e.color || 'rgba(220,200,160,0.95)'; ctx.fillRect(e.x, e.y, e.size || 2, e.size || 2); break;
+      case 6: // plasma
+        e.phase += dt*0.003; const pr = 30 + 60*Math.sin(e.phase + (meta.plasmaT||0)); drawCircle(e.x,e.y,Math.abs(pr),`hsla(${(e.h + (meta.plasmaT||0)*30)%360},80%,50%,0.9)`); break;
+      case 7: // glow
+        e.vy -= 0.0003*dt; e.vx*=0.995; e.vy*=0.995; e.x += e.vx*dt; e.y += e.vy*dt; drawCircle(e.x,e.y,e.r,`hsla(${e.hue},85%,65%,0.92)`); break;
+      case 8: // magnetic
+        let ax=0, ay=0; if(!meta.magnets){ meta.magnets = [{x:canvas.width/DPR*0.3,y:canvas.height/DPR*0.5,str:1},{x:canvas.width/DPR*0.7,y:canvas.height/DPR*0.5,str:-1}]; }
+        for(const m of meta.magnets){ const dxm = m.x - e.x, dym = m.y - e.y, d2m = dxm*dxm+dym*dym+20; const f = (m.str*2000)/d2m; ax += dxm*f; ay += dym*f; }
+        e.vx += ax*dt*0.00002; e.vy += ay*dt*0.00002; e.vx*=0.995; e.vy*=0.995; e.x+=e.vx*dt*0.05; e.y+=e.vy*dt*0.05; drawCircle(e.x,e.y,e.r,`hsla(${e.hue},80%,60%,0.95)`); break;
+      case 9: // jelly
+        e.phase += dt*0.004; const jr = Math.max(1, e.base*(0.9 + 0.2*Math.sin(e.phase))); drawCircle(e.x,e.y,jr,`hsla(${(e.hue+40)%360},85%,62%,0.92)`); break;
+      case 10: // tiles
+        e.off += dt*0.002; const tx = e.tx + Math.sin(e.off)*20; const ty = e.ty + Math.cos(e.off)*20; drawCircle(tx,ty,20,'rgba(200,220,255,0.9)'); break;
+      case 11: // wave curtains
+        e.phase += dt*0.003; const cols = Math.max(12, Math.floor(Math.sqrt(meta.detail||100))*4); const col = Math.floor(Math.random()*cols); const x = (col+0.5)*(canvas.width/DPR)/cols; const y = (0.5)* (canvas.height/DPR) + Math.sin(e.phase + col*0.2)*20; drawCircle(x,y,8,'rgba(160,200,255,0.95)'); break;
+    }
+  }
+  ctx.restore(); if(meta.spec && meta.spec.type===7 && entities.length < meta.detail) for(let i=0;i<3;i++) entities.push({x:Math.random()*canvas.width/DPR,y:canvas.height/DPR + Math.random()*60,r:6*meta.spec.scale + Math.random()*22*meta.spec.scale,vx:(Math.random()-0.5)*0.6,vy:-(0.5+Math.random()*1.2),hue:180+Math.random()*140}); if(meta.plasmaT !== undefined) meta.plasmaT = (meta.plasmaT || 0) + dt*0.002;
+}
+
+// hypercube N-D renderer (generalized, robust)
+function initHypercubeND(N, detail, scale){ meta.hN = {N, rot: {}, size: Math.min(canvas.width/DPR, canvas.height/DPR) * 0.12 * scale, speed: 0.6 + (N-3)*0.12 }; for(let a=0;a<N;a++) for(let b=a+1;b<N;b++) meta.hN.rot[`${a}${b}`] = (Math.random()*0.6 + 0.2); }
+function stepHypercubeND(N, dt){ const st = meta.hN; if(!st) return; ctx.fillStyle='rgba(6,12,22,0.06)'; ctx.fillRect(0,0,canvas.width/DPR,canvas.height/DPR); for(const k in st.rot) st.rot[k] += 0.0005 * dt * st.speed; const V = 1<<N; const vertsND = []; for(let i=0;i<V;i++){ const coord = []; for(let d=0; d<N; d++) coord.push(((i>>d)&1)?1:-1); vertsND.push(coord); } const rotated = vertsND.map(v=>v.slice()); for(let a=0;a<N;a++) for(let b=a+1;b<N;b++){ const theta = st.rot[`${a}${b}`] || 0; const ca=Math.cos(theta), sa=Math.sin(theta); for(const v of rotated){ const A=v[a], B=v[b]; v[a] = A*ca - B*sa; v[b] = A*sa + B*ca; } } const center = [canvas.width/DPR/2, canvas.height/DPR/2]; const size = st.size || Math.min(canvas.width/DPR, canvas.height/DPR)*0.12; const projD = 2.6; const pts2 = rotated.map(v => { let coords = v.slice(); for(let k=N-1;k>=2;k--){ const w = coords[k]; let denom = projD - (w * 0.5); if(Math.abs(denom) < 1e-6) denom = Math.sign(denom)*1e-6; const wf = 1/denom; for(let j=0;j<k;j++) coords[j] = coords[j] * wf; } return {x: center[0] + coords[0]*size, y: center[1] + coords[1]*size, depth: coords.slice(2).reduce((s,val)=>s+val,0)}; }); ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.lineWidth = Math.max(0.6, 1.2 - (N-3)*0.08); for(let i=0;i<V;i++) for(let j=i+1;j<V;j++){ let diff=0; for(let k=0;k<N;k++) if(((i>>k)&1) !== ((j>>k)&1)) diff++; if(diff===1){ const a=pts2[i], b=pts2[j]; const alpha = Math.max(0.04, 0.9 - (Math.abs(a.depth)+Math.abs(b.depth))/(N*3)); ctx.strokeStyle = `rgba(180,220,255,${alpha})`; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); } } ctx.restore(); }
+
+// main loop
+let lastFrame = performance.now(); function loop(now){ if(!running || paused) return; const dt = Math.min(40, now - lastFrame); lastFrame = now; try{ if(currentMode.startsWith('sim')) stepSimCommon(dt); else if(currentMode.startsWith('hyper')){ const d = parseInt(currentMode.replace('hyper','').replace('d',''),10); if(d>=3 && d<=10) stepHypercubeND(d, dt); } }catch(err){ console.error('Render error', err); ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,0,canvas.width/DPR,canvas.height/DPR); ctx.fillStyle='white'; ctx.fillText('Rendering error: '+err.message,20,40); } requestAnimationFrame(loop); }
+
+// initialize default
+initScene(currentMode); running = true; requestAnimationFrame(loop);
+
+// clicks
+canvas.addEventListener('click', e=>{ const mx = e.clientX - 420, my = e.clientY - 12; if(currentMode.startsWith('sim')){ for(let i=0;i<10;i++) entities.push({x: mx + (Math.random()-0.5)*80, y: my + (Math.random()-0.5)*80, r: 6*safeNum(scaleEl.value,1) + Math.random()*24, vx:(Math.random()-0.5)*0.8, vy:(Math.random()-0.5)*0.8, hue: 180 + Math.random()*180}); } else { const d = parseInt(currentMode.replace('hyper','').replace('d',''),10); if(d>=3 && meta.hN){ for(const k in meta.hN.rot) meta.hN.rot[k] += (Math.random()-0.5)*0.4; } } });
+
+resetViewBtn.onclick = ()=>{ if(currentMode.startsWith('hyper')){ const d = parseInt(currentMode.replace('hyper','').replace('d',''),10); if(d>=3) initHypercubeND(d, parseInt(detailEl.value), safeNum(scaleEl.value,1)); } else initScene(currentMode); };
+
+</script>
+</body>
+</html>
