@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PNB Connect access</title>
+  <style>
+    :root{
+      --bg:#0f1724; --card:#0b1220; --accent1:#6ee7b7; --accent2:#60a5fa; --glass: rgba(255,255,255,0.04);
+      --muted: rgba(255,255,255,0.6);
+      --panel-w: 260px;
+      --radius:14px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#031025 0%, #061428 100%);color:#dfeefe}
+    .app{display:flex;min-height:100vh}
+
+    /* Side panel */
+    .panel{width:var(--panel-w);padding:22px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));backdrop-filter: blur(6px);border-right:1px solid rgba(255,255,255,0.03)}
+    .brand{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+    .logo{width:46px;height:46px;border-radius:10px;background:linear-gradient(135deg,var(--accent1),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;color:#04293a}
+    .brand h1{font-size:18px;margin:0}
+    nav{display:flex;flex-direction:column;gap:8px}
+    .nav-btn{padding:10px 12px;border-radius:10px;display:flex;gap:10px;align-items:center;cursor:pointer;color:var(--muted);border:1px solid transparent}
+    .nav-btn:hover{background:rgba(255,255,255,0.02);color:#fff}
+    .nav-btn.active{background:linear-gradient(90deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));border-color:rgba(255,255,255,0.04);color:#fff}
+
+    /* Main */
+    .main{flex:1;padding:30px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:20px;border-radius:var(--radius);box-shadow: 0 6px 18px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.02)}
+    header .row{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+
+    h2{margin:0 0 8px 0}
+    p.muted{color:var(--muted);margin:0}
+
+    form{display:grid;gap:10px}
+    input[type=text],input[type=password],select,textarea{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:10px;border-radius:8px;color:inherit}
+    .btn{display:inline-block;padding:10px 14px;border-radius:10px;border:none;cursor:pointer;background:linear-gradient(90deg,var(--accent2),var(--accent1));color:#022; font-weight:600}
+    .ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+
+    .small{font-size:13px;color:var(--muted)}
+
+    /* Layout pieces */
+    .two-col{display:grid;grid-template-columns:1fr 360px;gap:18px}
+    .access-list{max-height:320px;overflow:auto;display:flex;flex-direction:column;gap:8px;margin-top:8px}
+    .access-item{padding:10px;border-radius:8px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.02);display:flex;justify-content:space-between;gap:10px}
+    .token{font-family:monospace;background:rgba(255,255,255,0.02);padding:6px;border-radius:6px}
+
+    footer{margin-top:16px;color:var(--muted);font-size:13px}
+
+    /* responsive */
+    @media (max-width:880px){:root{--panel-w:78px}.panel{width:78px;padding:12px}.brand h1{display:none}.two-col{grid-template-columns:1fr}.panel .nav-btn span{display:none}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="panel">
+      <div class="brand">
+        <div class="logo">PNB</div>
+        <div>
+          <h1>PNB Connect access</h1>
+          <div class="small">Secure access demo</div>
+        </div>
+      </div>
+
+      <nav>
+        <div class="nav-btn active" data-page="dashboard"><span>🏠</span><span>Dashboard</span></div>
+        <div class="nav-btn" data-page="login"><span>🔐</span><span>Login</span></div>
+        <div class="nav-btn" data-page="signup"><span>🧾</span><span>Sign up</span></div>
+        <div class="nav-btn" data-page="setup"><span>⚙️</span><span>Setup</span></div>
+        <div class="nav-btn" data-page="tutorial"><span>📘</span><span>Tutorial</span></div>
+      </nav>
+
+      <div style="margin-top:18px">
+        <button class="btn" id="logoutBtn">Sign out</button>
+      </div>
+
+      <div style="position:absolute;bottom:22px;left:22px;right:22px;font-size:12px;color:var(--muted)">v1.0 • Client-only demo</div>
+    </aside>
+
+    <main class="main">
+      <div id="pages">
+        <!-- Dashboard -->
+        <section data-page="dashboard" class="card page">
+          <div class="row">
+            <div>
+              <h2>Welcome to PNB Connect</h2>
+              <p class="muted">A single-file demo of the site with login, signup, setup and access creation.</p>
+            </div>
+            <div class="small">Status: <strong id="status">Not signed in</strong></div>
+          </div>
+
+          <div class="two-col">
+            <div>
+              <div class="card">
+                <h3>Your profile</h3>
+                <p class="small">Signed in as: <span id="profileName">—</span></p>
+                <p class="small">Email: <span id="profileEmail">—</span></p>
+                <div style="margin-top:12px">
+                  <button class="btn" id="openSetup">Open Setup</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Login -->
+        <section data-page="login" class="card page" style="display:none">
+          <h2>Login</h2>
+          <p class="muted">Enter your credentials to sign in.</p>
+          <form id="loginForm">
+            <input id="loginEmail" type="text" placeholder="Email" required>
+            <input id="loginPass" type="password" placeholder="Password" required>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn">Sign in</button>
+              <button type="button" class="ghost" id="toSignup">Create account</button>
+            </div>
+            <div id="loginMsg" class="small" style="color:#fca5a5"></div>
+          </form>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const DB_KEY='pnb_demo_users_v1';
+    const SESSION_KEY='pnb_demo_session_v1';
+    let sessionTimer = null;
+    const SESSION_DURATION = 300000; // 5 minutes
+
+    function showPage(name){
+      document.querySelectorAll('.page').forEach(p=>p.style.display=p.getAttribute('data-page')===name?'':'none');
+      document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.getAttribute('data-page')===name));
+    }
+
+    function loadUsers(){return JSON.parse(localStorage.getItem(DB_KEY)||'[]');}
+    function saveUsers(u){localStorage.setItem(DB_KEY,JSON.stringify(u));}
+    function currentSession(){return JSON.parse(localStorage.getItem(SESSION_KEY)||'null');}
+    function setSession(obj){localStorage.setItem(SESSION_KEY,JSON.stringify(obj)); refreshUI(); startSessionTimer();}
+    function clearSession(){localStorage.removeItem(SESSION_KEY); refreshUI();}
+
+    function uid(len=18){const chars='ABCDEFGHJKLMNPQRSTWXYZabcdefghijkmnopqrstuvwxyz23456789';let s='';for(let i=0;i<len;i++)s+=chars[Math.floor(Math.random()*chars.length)];return s;}
+
+    document.getElementById('signupForm')?.addEventListener('submit',e=>{
+      e.preventDefault();
+      const name=document.getElementById('suName').value.trim();
+      const email=document.getElementById('suEmail').value.trim().toLowerCase();
+      const pass=document.getElementById('suPass').value;
+      if(pass.length<6){alert('Password too short');return;}
+      const users=loadUsers();
+      if(users.find(u=>u.email===email)){alert('Email exists');return;}
+      users.push({id:uid(10),name,email,pass}); saveUsers(users);
+      alert('Account created'); showPage('login');
+    });
+
+    document.getElementById('loginForm').addEventListener('submit',e=>{
+      e.preventDefault();
+      const email=document.getElementById('loginEmail').value.trim().toLowerCase();
+      const pass=document.getElementById('loginPass').value;
+      const users=loadUsers();
+      const found=users.find(u=>u.email===email && u.pass===pass);
+      if(!found){alert('Invalid credentials');return;}
+      setSession({id:found.id,name:found.name,email:found.email}); showPage('dashboard');
+    });
+
+    document.getElementById('toSignup')?.addEventListener('click',()=>showPage('signup'));
+
+    document.getElementById('logoutBtn').addEventListener('click',()=>{clearSession(); alert('Signed out');});
+
+    const timerDisplay = document.createElement('div');
+    timerDisplay.style.position='fixed';
+    timerDisplay.style.top='10px';
+    timerDisplay.style.right='10px';
+    timerDisplay.style.padding='6px 10px';
+    timerDisplay.style.background='rgba(0,0,0,0.4)';
+    timerDisplay.style.borderRadius='6px';
+    timerDisplay.style.color='#fff';
+    timerDisplay.style.fontSize='13px';
+    timerDisplay.style.display='none';
+    document.body.appendChild(timerDisplay);
+
+    function startSessionTimer(){
+      if(!currentSession()){timerDisplay.style.display='none'; return;}
+      timerDisplay.style.display='block';
+      let remaining=SESSION_DURATION/1000;
+      timerDisplay.textContent='Session ends in: '+remaining+'s';
+      if(sessionTimer) clearInterval(sessionTimer);
+      sessionTimer=setInterval(()=>{
+        remaining--;
+        if(remaining===10) alert('Warning: Session will expire in 10 seconds!');
+        timerDisplay.textContent='Session ends in: '+remaining+'s';
+        if(remaining<=0){
+          clearInterval(sessionTimer);
+          alert('Session expired. Logging out and resetting access.');
+          clearSession();
+          location.reload();
+        }
+      },1000);
+    }
+
+    function refreshUI(){
+      const session=currentSession();
+      document.getElementById('status').textContent=session?'Signed in':'Not signed in';
+      document.getElementById('profileName').textContent=session?.name||'—';
+      document.getElementById('profileEmail').textContent=session?.email||'—';
+    }
+
+    refreshUI(); showPage('login');
+  </script>
+</body>
+</html>
