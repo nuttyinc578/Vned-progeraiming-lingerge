@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  pnb_connect:
+    build: ./pnb_connect
+    container_name: pnb_connect
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - pnb_net
+
+  pnb_console:
+    build: ./pnb_console
+    container_name: pnb_console
+    ports:
+      - "5000:5000"
+    depends_on:
+      - pnb_connect
+    networks:
+      - pnb_net
+
+networks:
+  pnb_net:
+    driver: bridge
